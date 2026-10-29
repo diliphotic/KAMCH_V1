@@ -1,0 +1,58 @@
+{
+  "name": "kamch-erp",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "tsx server.ts",
+    "build": "vite build",
+    "start": "tsx server.ts",
+    "preview": "vite preview",
+    "clean": "node -e \"const fs = require('fs'); if (fs.existsSync('dist')) fs.rmSync('dist', { recursive: true, force: true });\"",
+    "db:init": "tsx server/db/init.ts",
+    "db:migrate": "tsx server/db/migrate.ts",
+    "db:diagnose-students": "tsx scripts/diagnose-student-records.ts",
+    "db:import-faculty:dry-run": "tsx scripts/import-faculty-records.ts --dry-run",
+    "db:import-faculty": "tsx scripts/import-faculty-records.ts --apply",
+    "test:ia": "tsx scripts/test-ia-calculation.ts",
+    "test:ia-approval": "tsx scripts/test-ia-office-approval.ts",
+    "test:ia-final": "tsx scripts/test-step2f-final-verification.ts",
+    "test:univ-exams-stage4": "tsx scripts/test-university-exams-stage4.ts",
+    "test:verify-final": "tsx scripts/test-kamch-final-verification.ts",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@google/genai": "^2.4.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.1",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.2.3",
+    "express": "^4.21.2",
+    "lucide-react": "^0.546.0",
+    "motion": "^12.23.24",
+    "multer": "^2.5.0",
+    "mysql2": "^3.24.6",
+    "react": "^19.0.1",
+    "react-dom": "^19.0.1",
+    "vite": "^8.3.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^3.0.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^4.17.21",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.4.21",
+    "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.21.0",
+    "typescript": "^7.0.2"
+  }
+}

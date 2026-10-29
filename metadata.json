@@ -1,0 +1,6 @@
+{
+  "name": "KAMCH ERP — Krishna Ayurvedic Medical College & Hospital",
+  "description": "Institutional ERP for Krishna Ayurvedic Medical College & Hospital covering User Management, Student Management, Academic Progression, Internship, and Fees Management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
