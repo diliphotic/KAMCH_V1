@@ -4,6 +4,7 @@ import { NavigationItemKey } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { Badge } from '../ui/Badge';
 import { NotificationDropdown } from '../ui/NotificationDropdown';
+import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
 export interface TopNavbarProps {
   onOpenMobileMenu: () => void;
@@ -70,6 +71,8 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
       {/* Zone 2: User Status, Password Change & Sign In/Out Action */}
       <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+        <PWAInstallButton />
+
         {user ? (
           <div className="flex items-center gap-2 sm:gap-3">
             <NotificationDropdown />

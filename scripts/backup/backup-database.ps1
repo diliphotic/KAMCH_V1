@@ -213,8 +213,10 @@ try {
     $FinalItem = Get-Item -LiteralPath $FinalBackupFile
     $FileSizeKB = [math]::Round($FinalItem.Length / 1KB, 2)
 
-    # Compute SHA-256 Checksum
+    # Compute SHA-256 Checksum and write companion .sha256 file
     $LocalHash = (Get-FileHash -LiteralPath $FinalBackupFile -Algorithm SHA256).Hash
+    $ShaFile = "$FinalBackupFile.sha256"
+    Set-Content -LiteralPath $ShaFile -Value "$LocalHash  $BackupFileName" -Encoding utf8
     Write-BackupLog "SUCCESS" "INTERNAL" "Backup verified and saved: $BackupFileName ($FileSizeKB KB, SHA-256: $LocalHash)"
 
 } catch {
@@ -238,6 +240,9 @@ if ($ConfiguredUsbDir) {
 
             $UsbDestFile = Join-Path $ConfiguredUsbDir $BackupFileName
             Copy-Item -LiteralPath $FinalBackupFile -Destination $UsbDestFile -Force
+            if (Test-Path -LiteralPath $ShaFile) {
+                Copy-Item -LiteralPath $ShaFile -Destination "$UsbDestFile.sha256" -Force
+            }
 
             # Compute and verify SHA-256 checksum on copied USB file
             $UsbHash = (Get-FileHash -LiteralPath $UsbDestFile -Algorithm SHA256).Hash
@@ -245,12 +250,14 @@ if ($ConfiguredUsbDir) {
             if ($UsbHash -eq $LocalHash) {
                 Write-BackupLog "SUCCESS" "USB" "Verified copy written to USB drive: $UsbDestFile (SHA-256 matched: $UsbHash)"
 
-                # Prune older USB backups (retention)
+                # Prune older USB backups (retention) - NEVER delete the only backup
                 $UsbBackups = Get-ChildItem -LiteralPath $ConfiguredUsbDir -Filter "kamch_erp_backup_*.sql" | Sort-Object CreationTime -Descending
-                if ($UsbBackups.Count -gt $RetentionDays) {
+                if ($UsbBackups.Count -gt $RetentionDays -and $UsbBackups.Count -gt 1) {
                     $UsbToRemove = $UsbBackups | Select-Object -Skip $RetentionDays
                     foreach ($OldUsbFile in $UsbToRemove) {
                         Remove-Item -LiteralPath $OldUsbFile.FullName -Force
+                        $UsbSha = "$($OldUsbFile.FullName).sha256"
+                        if (Test-Path -LiteralPath $UsbSha) { Remove-Item -LiteralPath $UsbSha -Force }
                         Write-BackupLog "INFO" "RETENTION" "Pruned old USB backup: $($OldUsbFile.Name)"
                     }
                 }
@@ -268,18 +275,20 @@ if ($ConfiguredUsbDir) {
     Write-BackupLog "INFO" "USB" "No external USB backup directory configured (BACKUP_USB_DIR in .env is blank). Local backup complete."
 }
 
-# 7. Retention Policy: Retain the latest 7 daily verified backups locally
+# 7. Retention Policy: Retain the latest verified backups locally (NEVER delete the only usable backup)
 try {
     $LocalBackups = Get-ChildItem -LiteralPath $LocalBackupDir -Filter "kamch_erp_backup_*.sql" | Sort-Object CreationTime -Descending
-    if ($LocalBackups.Count -gt $RetentionDays) {
+    if ($LocalBackups.Count -gt $RetentionDays -and $LocalBackups.Count -gt 1) {
         $FilesToRemove = $LocalBackups | Select-Object -Skip $RetentionDays
         foreach ($OldFile in $FilesToRemove) {
             Remove-Item -LiteralPath $OldFile.FullName -Force
+            $LocalSha = "$($OldFile.FullName).sha256"
+            if (Test-Path -LiteralPath $LocalSha) { Remove-Item -LiteralPath $LocalSha -Force }
             Write-BackupLog "INFO" "RETENTION" "Pruned old local backup exceeding retention limit: $($OldFile.Name)"
         }
     }
-    $RemainingCount = [Math]::Min($LocalBackups.Count, $RetentionDays)
-    Write-BackupLog "INFO" "RETENTION" "Retention check complete. $RemainingCount verified daily backups retained in $LocalBackupDir."
+    $RemainingCount = [Math]::Min($LocalBackups.Count, [Math]::Max(1, $RetentionDays))
+    Write-BackupLog "INFO" "RETENTION" "Retention check complete. $RemainingCount verified backups retained in $LocalBackupDir."
 } catch {
     Write-BackupLog "WARNING" "RETENTION" "Error applying retention cleanup: $_"
 }

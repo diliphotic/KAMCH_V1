@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Bell, Check, CheckCheck, Inbox } from 'lucide-react';
+import { Bell, Check, Inbox, Send, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
 
 export interface NotificationItem {
   id: number;
@@ -16,7 +17,19 @@ export const NotificationDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [testFeedback, setTestFeedback] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const {
+    isSupported: isPushSupported,
+    permission: pushPermission,
+    isSubscribed,
+    isLoading: pushLoading,
+    error: pushError,
+    subscribe,
+    unsubscribe,
+    sendTestNotification,
+  } = usePushNotifications();
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -68,6 +81,13 @@ export const NotificationDropdown: React.FC = () => {
     }
   };
 
+  const handleTestPush = async () => {
+    setTestFeedback('Sending test notification...');
+    const res = await sendTestNotification();
+    setTestFeedback(res.message);
+    setTimeout(() => setTestFeedback(null), 5000);
+  };
+
   if (!user) return null;
 
   return (
@@ -104,9 +124,9 @@ export const NotificationDropdown: React.FC = () => {
             </button>
           </div>
 
-          <div className="max-h-80 overflow-y-auto divide-y divide-stone-100">
+          <div className="max-h-72 overflow-y-auto divide-y divide-stone-100">
             {notifications.length === 0 ? (
-              <div className="py-12 flex flex-col items-center justify-center text-stone-400 text-xs gap-1.5">
+              <div className="py-10 flex flex-col items-center justify-center text-stone-400 text-xs gap-1.5">
                 <Inbox className="w-8 h-8 text-stone-300" />
                 <span>No notifications yet</span>
               </div>
@@ -138,6 +158,82 @@ export const NotificationDropdown: React.FC = () => {
                   )}
                 </div>
               ))
+            )}
+          </div>
+
+          {/* Web Push Notification Infrastructure Control Panel (Requirement 4) */}
+          <div className="p-3 bg-stone-50/90 border-t border-stone-200 text-xs">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span className="font-semibold text-[11px] text-stone-700 flex items-center gap-1">
+                <Bell className="w-3.5 h-3.5 text-[#4B2E2E]" />
+                Device Push Notifications
+              </span>
+              <span className="text-[10px] text-stone-500 font-mono">
+                {isSubscribed ? (
+                  <span className="text-emerald-700 font-semibold inline-flex items-center gap-0.5">
+                    <ShieldCheck className="w-3 h-3" /> Active
+                  </span>
+                ) : pushPermission === 'denied' ? (
+                  <span className="text-red-600">Blocked in Browser</span>
+                ) : (
+                  <span>Inactive</span>
+                )}
+              </span>
+            </div>
+
+            {isPushSupported ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    disabled={pushLoading || pushPermission === 'denied'}
+                    onClick={() => {
+                      if (isSubscribed) {
+                        void unsubscribe();
+                      } else {
+                        void subscribe();
+                      }
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-md border transition cursor-pointer flex items-center gap-1 ${
+                      isSubscribed
+                        ? 'bg-stone-100 text-stone-700 border-stone-300 hover:bg-stone-200'
+                        : 'bg-[#4B2E2E] text-white border-[#3B2424] hover:bg-[#3B2424]'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    {pushLoading && <Loader2 className="w-3 h-3 animate-spin" />}
+                    <span>{isSubscribed ? 'Disable on Device' : 'Enable Device Push'}</span>
+                  </button>
+
+                  {isSubscribed && (
+                    <button
+                      type="button"
+                      disabled={pushLoading}
+                      onClick={handleTestPush}
+                      className="px-2.5 py-1 text-[11px] font-medium text-[#4B2E2E] bg-white border border-[#4B2E2E]/30 rounded-md hover:bg-amber-50/50 transition cursor-pointer flex items-center gap-1"
+                    >
+                      <Send className="w-3 h-3" />
+                      <span>Send Test Push</span>
+                    </button>
+                  )}
+                </div>
+
+                {testFeedback && (
+                  <p className="text-[11px] text-[#4B2E2E] font-medium bg-amber-50 p-1.5 rounded border border-amber-200/60 animate-in fade-in">
+                    {testFeedback}
+                  </p>
+                )}
+
+                {pushError && (
+                  <p className="text-[11px] text-red-600 flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>{pushError}</span>
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="text-[11px] text-stone-500 italic">
+                Web Push is not supported by your current browser.
+              </p>
             )}
           </div>
         </div>

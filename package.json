@@ -17,6 +17,11 @@
     "db:diagnose-students": "tsx scripts/diagnose-student-records.ts",
     "db:import-faculty:dry-run": "tsx scripts/import-faculty-records.ts --dry-run",
     "db:import-faculty": "tsx scripts/import-faculty-records.ts --apply",
+    "db:backup": "tsx scripts/backup/run-backup-cli.ts",
+    "db:backup:weekly": "tsx scripts/backup/run-backup-cli.ts --weekly",
+    "db:restore:test": "tsx scripts/backup/run-restore-cli.ts",
+    "test:backup": "tsx scripts/test-backup-and-restore.ts",
+    "test:pwa": "tsx scripts/test-pwa-and-push.ts",
     "test:ia": "tsx scripts/test-ia-calculation.ts",
     "test:ia-approval": "tsx scripts/test-ia-office-approval.ts",
     "test:ia-final": "tsx scripts/test-step2f-final-verification.ts",
@@ -39,6 +44,7 @@
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^8.3.0",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -49,6 +55,7 @@
     "@types/node": "^22.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/web-push": "^3.6.4",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.28.2",
     "tailwindcss": "^4.3.3",

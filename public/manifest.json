@@ -2,25 +2,32 @@
   "id": "/",
   "name": "KAMCH ERP — Krishna Ayurvedic Medical College & Hospital",
   "short_name": "KAMCH ERP",
-  "description": "Institutional ERP for Krishna Ayurvedic Medical College & Hospital",
+  "description": "Institutional ERP for Krishna Ayurvedic Medical College & Hospital covering User Management, Student Management, Academic Progression, and Fees Management.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#FAF9F5",
   "theme_color": "#4B2E2E",
+  "categories": ["education", "management"],
   "icons": [
     {
-      "src": "/assets/kamch-logo.png",
+      "src": "/assets/pwa-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/assets/kamch-logo.png",
+      "src": "/assets/pwa-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/assets/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/assets/kamch-logo.svg",

@@ -15,6 +15,8 @@ import { libraryRouter } from './server/routes/library.routes.ts';
 import { leaveRouter } from './server/routes/leave.routes.ts';
 import { attendanceRouter } from './server/routes/attendance.routes.ts';
 import { notificationsRouter } from './server/routes/notifications.routes.ts';
+import { backupRouter } from './server/routes/backup.routes.ts';
+import { initBackupScheduler } from './server/services/backup-scheduler.ts';
 import { requireAuth, requirePasswordChangeClear, requireRoles } from './server/middleware/auth.ts';
 import { FEES_AND_STUDENTS_ROLES } from './server/permissions.ts';
 import { logInfo, logError } from './server/services/logger.ts';
@@ -45,6 +47,11 @@ const { port: PORT, isProduction } = validateEnvironment();
 
 async function startServer() {
   const app = express();
+
+  // Configure reverse proxy trust when in production or behind reverse proxy (Nginx / Cloudflare)
+  if (isProduction || process.env.TRUST_PROXY === 'true' || process.env.TRUST_PROXY === '1') {
+    app.set('trust proxy', 1);
+  }
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -132,7 +139,43 @@ async function startServer() {
   app.use('/api/leave', leaveRouter);
   app.use('/api/attendance', attendanceRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/admin/backups', backupRouter);
   app.use('/api', recordsRouter);
+
+  // 404 Handler for Unmatched API routes (prevents falling through to SPA HTML index)
+  app.all('/api/*', (_req, res) => {
+    res.status(404).json({
+      error: 'API endpoint not found',
+      code: 'NOT_FOUND',
+    });
+  });
+
+  // Global Error Sanitization Middleware
+  // Ensures database passwords, query strings, and internal stack traces are never leaked in production
+  app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    logError('EXPRESS_ERROR', `Unhandled request error on ${req.method} ${req.originalUrl || req.url}`, err);
+
+    if (res.headersSent) {
+      return;
+    }
+
+    const statusCode = typeof err?.status === 'number' && err.status >= 400 && err.status < 600
+      ? err.status
+      : 500;
+
+    if (isProduction) {
+      res.status(statusCode).json({
+        error: statusCode === 404 ? 'Resource not found' : 'An internal server error occurred. Please contact the administrator.',
+        code: err?.code || 'INTERNAL_SERVER_ERROR',
+      });
+    } else {
+      res.status(statusCode).json({
+        error: err?.message || 'Internal Server Error',
+        code: err?.code || 'INTERNAL_SERVER_ERROR',
+        details: err?.stack,
+      });
+    }
+  });
 
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
@@ -154,40 +197,79 @@ async function startServer() {
     });
   }
 
+  // In production, verify database connection BEFORE binding to port
+  if (isProduction) {
+    console.log('[KAMCH ERP] Production mode detected. Verifying persistent MySQL database connectivity...');
+    const dbStatus = await checkDatabaseConnection();
+    if (!dbStatus.connected) {
+      const fatalMsg = `[FATAL] Production database connection failed (${dbStatus.code}): ${dbStatus.diagnosticNote}. Server startup halted. In-memory fallback is disabled in production.`;
+      console.error(fatalMsg);
+      logError('FATAL_STARTUP', fatalMsg);
+      process.exit(1);
+    }
+    const dbMsg = `Production MySQL connection verified successfully (latency: ${dbStatus.latencyMs}ms).`;
+    console.log(`[KAMCH ERP Database] ${dbMsg}`);
+    logInfo('DATABASE', dbMsg);
+
+    // Apply safe, idempotent additive migrations on connected MySQL database
+    try {
+      const pool = getPool();
+      const conn = await pool.getConnection();
+      try {
+        await runAdditiveMigrations(conn);
+      } finally {
+        conn.release();
+      }
+    } catch (migErr) {
+      logError('MIGRATION', 'Production additive migration check encountered an issue', migErr);
+      console.error('[KAMCH ERP Migration] Fatal migration error in production:', migErr);
+      process.exit(1);
+    }
+  }
+
   app.listen(PORT, '0.0.0.0', () => {
     const startupMsg = `Institutional Server running at http://localhost:${PORT} (Node: ${process.version}, PID: ${process.pid})`;
     console.log(`[KAMCH ERP] ${startupMsg}`);
     logInfo('STARTUP', startupMsg);
 
-    // Non-blocking database connection verification & safe additive migration check on startup
-    checkDatabaseConnection()
-      .then(async (status) => {
-        if (status.connected) {
-          const dbMsg = `MySQL connection verified successfully (latency: ${status.latencyMs}ms).`;
-          console.log(`[KAMCH ERP Database] ${dbMsg}`);
-          logInfo('DATABASE', dbMsg);
+    // Initialize server-side recurring backup scheduler (Requirement 2 & 3)
+    try {
+      initBackupScheduler();
+    } catch (schedErr) {
+      logError('BACKUP_SCHEDULER', 'Failed to initialize recurring backup scheduler', schedErr);
+    }
 
-          // Apply safe, idempotent additive migrations on connected MySQL database
-          const pool = getPool();
-          const conn = await pool.getConnection();
-          try {
-            await runAdditiveMigrations(conn);
-          } catch (migErr) {
-            logError('MIGRATION', 'Additive migration check encountered an issue', migErr);
-          } finally {
-            conn.release();
+    // Non-blocking database connection verification & safe additive migration check for development mode only
+    if (!isProduction) {
+      checkDatabaseConnection()
+        .then(async (status) => {
+          if (status.connected) {
+            const dbMsg = `MySQL connection verified successfully (latency: ${status.latencyMs}ms).`;
+            console.log(`[KAMCH ERP Database] ${dbMsg}`);
+            logInfo('DATABASE', dbMsg);
+
+            // Apply safe, idempotent additive migrations on connected MySQL database
+            const pool = getPool();
+            const conn = await pool.getConnection();
+            try {
+              await runAdditiveMigrations(conn);
+            } catch (migErr) {
+              logError('MIGRATION', 'Additive migration check encountered an issue', migErr);
+            } finally {
+              conn.release();
+            }
+          } else {
+            const dbWarn = `MySQL service not reachable (${status.code || 'UNKNOWN'}). Server operational in standalone mode. Note: ${status.diagnosticNote || 'Check MySQL service'}`;
+            console.warn(`[KAMCH ERP Database] ${dbWarn}`);
+            logError('DATABASE', dbWarn);
           }
-        } else {
-          const dbWarn = `MySQL service not reachable (${status.code || 'UNKNOWN'}). Server operational in standalone mode. Note: ${status.diagnosticNote || 'Check MySQL service'}`;
-          console.warn(`[KAMCH ERP Database] ${dbWarn}`);
-          logError('DATABASE', dbWarn);
-        }
-      })
-      .catch((err) => {
-        const errStr = (err as Error).message;
-        console.warn('[KAMCH ERP Database] Startup connection check encountered error:', errStr);
-        logError('DATABASE', 'Startup connection check encountered error', err);
-      });
+        })
+        .catch((err) => {
+          const errStr = (err as Error).message;
+          console.warn('[KAMCH ERP Database] Startup connection check encountered error:', errStr);
+          logError('DATABASE', 'Startup connection check encountered error', err);
+        });
+    }
   });
 }
 

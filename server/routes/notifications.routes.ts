@@ -130,3 +130,125 @@ notificationsRouter.post(
     }
   }
 );
+
+// ==============================================================================
+// WEB PUSH NOTIFICATION INFRASTRUCTURE ENDPOINTS
+// ==============================================================================
+
+import {
+  getPublicVapidKey,
+  saveUserSubscription,
+  removeUserSubscription,
+  getUserSubscriptionStatus,
+  sendTestPushNotification,
+  sendPushNotificationToUser,
+} from '../services/web-push.service.ts';
+
+/**
+ * GET /api/notifications/push/public-key
+ * Returns the public VAPID key so the browser can create a push subscription.
+ * Safe to expose to authenticated clients. Private key is never returned.
+ */
+notificationsRouter.get('/push/public-key', (req: Request, res: Response) => {
+  try {
+    const publicKey = getPublicVapidKey();
+    res.json({ success: true, publicKey });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve VAPID public key', details: (err as Error).message });
+  }
+});
+
+/**
+ * GET /api/notifications/push/status
+ * Returns whether the current authenticated user has an active push subscription.
+ */
+notificationsRouter.get('/push/status', async (req: Request, res: Response) => {
+  try {
+    const status = await getUserSubscriptionStatus(req.user!.id);
+    res.json({ success: true, ...status });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to check push subscription status', details: (err as Error).message });
+  }
+});
+
+/**
+ * POST /api/notifications/push/subscribe
+ * Registers a client's PushSubscription associated with the authenticated user.
+ */
+notificationsRouter.post('/push/subscribe', async (req: Request, res: Response) => {
+  const { subscription } = req.body || {};
+  if (!subscription || !subscription.endpoint || !subscription.keys?.p256dh || !subscription.keys?.auth) {
+    res.status(400).json({ error: 'Invalid push subscription payload', code: 'INVALID_SUBSCRIPTION' });
+    return;
+  }
+
+  try {
+    const userAgent = req.headers['user-agent'] || undefined;
+    const result = await saveUserSubscription(req.user!.id, subscription, userAgent);
+    res.json({
+      success: true,
+      message: result.updated ? 'Subscription updated' : 'Subscription registered successfully',
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save push subscription', details: (err as Error).message });
+  }
+});
+
+/**
+ * POST /api/notifications/push/unsubscribe
+ * Deactivates the user's push subscription (strictly scoped to the authenticated user).
+ */
+notificationsRouter.post('/push/unsubscribe', async (req: Request, res: Response) => {
+  const { endpoint } = req.body || {};
+  try {
+    const deactivatedCount = await removeUserSubscription(req.user!.id, endpoint);
+    res.json({ success: true, message: 'Unsubscribed successfully', deactivatedCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to remove push subscription', details: (err as Error).message });
+  }
+});
+
+/**
+ * POST /api/notifications/push/test
+ * Sends a controlled test notification to the authenticated user's registered devices.
+ */
+notificationsRouter.post('/push/test', async (req: Request, res: Response) => {
+  try {
+    const result = await sendTestPushNotification(req.user!.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to send test push notification', details: (err as Error).message });
+  }
+});
+
+/**
+ * POST /api/notifications/push/admin-test
+ * Administrative endpoint to verify push dispatch to a target user.
+ * Protected with SUPER_ADMIN / PRINCIPAL roles.
+ */
+notificationsRouter.post(
+  '/push/admin-test',
+  requireRoles(ROLES.PRINCIPAL, ROLES.SUPER_ADMIN),
+  async (req: Request, res: Response) => {
+    const { targetUserId, title, body } = req.body || {};
+    const userId = Number(targetUserId) || req.user!.id;
+
+    try {
+      const result = await sendPushNotificationToUser(userId, {
+        title: title || 'KAMCH ERP Administrative Notification Test',
+        body: body || 'Controlled Web Push dispatch verification by Institutional Administrator.',
+        url: '/',
+        tag: 'admin-test',
+      });
+
+      res.json({
+        success: true,
+        targetUserId: userId,
+        result,
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to execute admin push test', details: (err as Error).message });
+    }
+  }
+);
+

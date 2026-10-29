@@ -13,6 +13,7 @@ export interface MemoryNotification {
 
 export function ensureNotificationsMemoryStore(memDb: any) {
   if (!memDb.notifications) memDb.notifications = [];
+  if (!memDb.pushSubscriptions) memDb.pushSubscriptions = [];
 }
 
 export function handleNotificationsQuery(
@@ -23,6 +24,78 @@ export function handleNotificationsQuery(
   const upper = sql.trim().toUpperCase();
   ensureNotificationsMemoryStore(memDb);
   const m = memDb as any;
+
+  // 1. push_subscriptions table handling
+  if (upper.includes('FROM PUSH_SUBSCRIPTIONS') || upper.includes('FROM `PUSH_SUBSCRIPTIONS`')) {
+    if (upper.includes('WHERE USER_ID = ?') && upper.includes('IS_ACTIVE = TRUE')) {
+      const uid = Number(params[0]);
+      const list = m.pushSubscriptions.filter((s: any) => s.user_id === uid && s.is_active);
+      if (upper.includes('COUNT(*)')) {
+        return [[{ cnt: list.length, count: list.length }], []];
+      }
+      return [list, []];
+    }
+    if (upper.includes('WHERE USER_ID = ?') && upper.includes('ENDPOINT = ?')) {
+      const uid = Number(params[0]);
+      const ep = String(params[1]);
+      const list = m.pushSubscriptions.filter((s: any) => s.user_id === uid && s.endpoint === ep);
+      return [list, []];
+    }
+    return [m.pushSubscriptions, []];
+  }
+
+  if (upper.startsWith('INSERT INTO PUSH_SUBSCRIPTIONS') || upper.startsWith('INSERT INTO `PUSH_SUBSCRIPTIONS`')) {
+    const nextId = m.pushSubscriptions.length > 0 ? Math.max(...m.pushSubscriptions.map((s: any) => s.id)) + 1 : 1;
+    const now = new Date().toISOString();
+    const newSub = {
+      id: nextId,
+      user_id: Number(params[0]),
+      endpoint: String(params[1]),
+      p256dh: String(params[2]),
+      auth: String(params[3]),
+      user_agent: params[4] ? String(params[4]) : null,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    };
+    m.pushSubscriptions.push(newSub);
+    return [{ insertId: nextId, affectedRows: 1 }, []];
+  }
+
+  if (upper.startsWith('UPDATE PUSH_SUBSCRIPTIONS') || upper.startsWith('UPDATE `PUSH_SUBSCRIPTIONS`')) {
+    if (upper.includes('SET IS_ACTIVE = FALSE') && upper.includes('WHERE USER_ID = ?')) {
+      const uid = Number(params[0]);
+      let affected = 0;
+      if (params.length > 1 && upper.includes('AND ENDPOINT = ?')) {
+        const ep = String(params[1]);
+        for (const s of m.pushSubscriptions) {
+          if (s.user_id === uid && s.endpoint === ep) {
+            s.is_active = false;
+            affected++;
+          }
+        }
+      } else {
+        for (const s of m.pushSubscriptions) {
+          if (s.user_id === uid) {
+            s.is_active = false;
+            affected++;
+          }
+        }
+      }
+      return [{ affectedRows: affected }, []];
+    }
+    if (upper.includes('SET IS_ACTIVE = TRUE') && upper.includes('WHERE USER_ID = ?') && upper.includes('ENDPOINT = ?')) {
+      const uid = Number(params[0]);
+      const ep = String(params[1]);
+      const existing = m.pushSubscriptions.find((s: any) => s.user_id === uid && s.endpoint === ep);
+      if (existing) {
+        existing.is_active = true;
+        existing.updated_at = new Date().toISOString();
+        return [{ affectedRows: 1 }, []];
+      }
+    }
+    return [{ affectedRows: 0 }, []];
+  }
 
   if (upper.includes('FROM NOTIFICATIONS') || upper.includes('FROM `NOTIFICATIONS`')) {
     if (upper.includes('WHERE USER_ID = ?')) {

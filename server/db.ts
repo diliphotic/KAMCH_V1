@@ -72,7 +72,14 @@ function createFallbackConnection(): any {
  * When MySQL connection is unavailable, seamlessly returns fallback pool proxy.
  */
 export function getPool(): Pool {
+  const isProduction = process.env.NODE_ENV === 'production';
+
   if (isFallbackActive) {
+    if (isProduction) {
+      throw new Error(
+        '[KAMCH ERP FATAL] In-memory database fallback is prohibited in production mode. Verify MySQL configuration.'
+      );
+    }
     return {
       query: async (sql: string, params?: any[]) => {
         return hybridHandler.executeQuery(sql, params);
@@ -85,6 +92,11 @@ export function getPool(): Pool {
 
   const dbConfig = getDatabaseEnvConfig();
   if (!dbConfig.isHostExplicit || !dbConfig.isDatabaseExplicit) {
+    if (isProduction) {
+      throw new Error(
+        `[KAMCH ERP Database FATAL] Production database configuration missing. DB_HOST and DB_NAME must be configured in environment variables in production. Fallback mode is prohibited in production.`
+      );
+    }
     isFallbackActive = true;
     return {
       query: async (sql: string, params?: any[]) => {
@@ -136,9 +148,23 @@ export const pool: Pool = new Proxy({} as Pool, {
 export async function checkDatabaseConnection(): Promise<DatabaseHealthStatus> {
   const startTime = Date.now();
   const dbConfig = getDatabaseEnvConfig();
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  // If database configuration is not explicitly provided, use in-memory fallback silently
+  // If database configuration is not explicitly provided
   if (!dbConfig.isHostExplicit || !dbConfig.isDatabaseExplicit) {
+    if (isProduction) {
+      const fatalMsg =
+        '[KAMCH ERP Database FATAL] In-memory fallback is strictly prohibited in production mode. DB_HOST and DB_NAME must be set in production.';
+      console.error(fatalMsg);
+      isFallbackActive = false;
+      return {
+        connected: false,
+        code: 'PRODUCTION_DB_UNCONFIGURED',
+        latencyMs: 0,
+        diagnosticNote: fatalMsg,
+        isFallback: false,
+      };
+    }
     isFallbackActive = true;
     return {
       connected: false,
@@ -176,6 +202,26 @@ export async function checkDatabaseConnection(): Promise<DatabaseHealthStatus> {
     const errorCode = error.code || 'CONNECTION_FAILED';
     const latencyMs = Date.now() - startTime;
 
+    if (isProduction) {
+      console.error(
+        `[KAMCH ERP Database FATAL] Connection verification failed in production mode:
+  Error Code    : ${errorCode} (errno: ${error.errno ?? 'N/A'}, sqlState: ${error.sqlState ?? 'N/A'})
+  Server Message: ${error.sqlMessage || error.message || 'No specific SQL error message'}
+  Target Host   : ${dbConfig.host ?? '<UNSET>'} (port ${dbConfig.port})
+  Target DB     : ${dbConfig.database ?? '<UNSET>'}
+  Action Taken  : In-memory fallback is disabled in production. Startup must halt.`
+      );
+
+      isFallbackActive = false;
+      return {
+        connected: false,
+        code: errorCode,
+        latencyMs,
+        diagnosticNote: `Production database connection failed (${errorCode}): ${error.sqlMessage || error.message || 'Check MySQL service'}`,
+        isFallback: false,
+      };
+    }
+
     console.warn(
       `[KAMCH ERP Database] Connection verification failed:
   Error Code    : ${errorCode} (errno: ${error.errno ?? 'N/A'}, sqlState: ${error.sqlState ?? 'N/A'})
@@ -187,7 +233,7 @@ export async function checkDatabaseConnection(): Promise<DatabaseHealthStatus> {
   Action Taken  : Activated resilient in-memory database fallback for preview execution.`
     );
 
-    // Activate fallback mode so preview UI and tests run reliably
+    // Activate fallback mode so preview UI and tests run reliably in development
     isFallbackActive = true;
 
     return {

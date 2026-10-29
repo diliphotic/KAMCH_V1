@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { TopNavbar } from './TopNavbar';
+import { OfflineBanner } from '../pwa/OfflineBanner';
 import { NavigationItemKey } from '../../types';
 
 export interface AppLayoutProps {
@@ -18,6 +19,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-[#FAF9F5] text-stone-800 flex flex-col antialiased overflow-x-hidden print:bg-white print:overflow-visible">
+      {/* Offline Status Warning Bar */}
+      <OfflineBanner />
+
       {/* Sidebar Navigation */}
       <Sidebar
         currentTab={currentTab}
