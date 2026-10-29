@@ -1,0 +1,662 @@
+# KAMCH ERP — USER MANAGEMENT MODULE
+## Final Implementation Specification
+
+### 1. Objective
+
+Implement the User Management module for Krishna Ayurvedic Medical College and Hospital (KAMCH ERP).
+
+This module must provide secure account creation, role assignment, account suspension and deactivation, password management, session security, and role-based visibility throughout the ERP.
+
+The requirements in this document are authoritative.
+
+The Fees Management module has already been implemented and fixed. Preserve it and all other working features.
+
+**Implement only the User Management requirements below. Do not conduct a separate audit, rebuild the ERP, or add unrelated features.**
+
+---
+
+## 2. Mandatory Development Rules
+
+1. Work within the existing project and technology stack.
+2. Reuse the existing database connection, authentication system, session management, password hashing, CSRF protection, logging, and UI components wherever they are correct.
+3. Make the smallest safe changes necessary to implement the requirements.
+4. Do not redesign or rebuild unrelated modules.
+5. Do not delete, reset, or recreate the database.
+6. Do not remove or overwrite existing users or their records.
+7. Use safe, additive database migrations when required.
+8. Do not introduce a second authentication system or duplicate role system.
+9. Do not create demo users or fake student, teacher, department, or account records.
+10. Do not hardcode account lists, user data, permissions, or department names into the frontend. Store and retrieve applicable data through the database and existing authorization mechanisms.
+11. Enforce authorization on the server/API. Hiding a menu item alone is not security.
+12. Do not create additional roles without explicit approval.
+13. Do not add student login or faculty login functionality in this phase.
+14. Complete implementation, test it, fix introduced errors, and provide a concise completion report.
+15. Do not begin another module after finishing this one.
+
+---
+
+## 3. Account Roles and Responsibilities
+
+Use the existing role and authentication architecture wherever possible. Map the following roles to the existing system without creating duplicate or conflicting roles.
+
+### A. Super Admin
+
+The Super Admin has complete control over the entire ERP.
+
+Permissions:
+- Access every module and all authorized institutional records.
+- Create accounts for all supported roles.
+- Edit account details.
+- Assign and change roles.
+- Suspend, reactivate, and deactivate accounts.
+- Reset other users' passwords.
+- Configure and manage departments and department accounts.
+- View all accounts, including the Super Admin account.
+- Access all institutional modules and system settings.
+- View audit logs and account activity.
+- Manage account security and unlock temporarily locked accounts.
+
+The Super Admin must be protected against unauthorized account manipulation by other roles.
+
+### B. Principal
+
+The Principal has access to every institutional module, subject to the explicitly protected Super Admin account.
+
+Permissions:
+- Access all institutional modules and their records.
+- Create user accounts.
+- Edit user account details.
+- Assign and change roles, subject to Super Admin protection.
+- Suspend and reactivate accounts.
+- Deactivate accounts while preserving history.
+- Reset user passwords.
+- View and manage institutional operations.
+
+Restrictions:
+- Must never see the Super Admin account in the User Management interface, search results, account lists, or account selectors.
+- Must not suspend, deactivate, modify the role of, or otherwise manipulate the Super Admin account.
+- Must not obtain access to Super Admin account details through direct API requests.
+
+### C. Secretary
+
+The Secretary has the same general institutional access and account-management capabilities as the Principal, subject to the same Super Admin protections.
+
+Permissions:
+- Access all institutional modules.
+- Create and edit user accounts.
+- Assign and change roles, subject to Super Admin protection.
+- Suspend and reactivate accounts.
+- Deactivate accounts while preserving history.
+- Reset user passwords.
+- View and manage institutional operations.
+
+Restrictions:
+- Must never see the Super Admin account in the User Management interface, search results, account lists, or account selectors.
+- Must not suspend, deactivate, modify the role of, or otherwise manipulate the Super Admin account.
+- Must not obtain access to Super Admin account details through direct API requests.
+
+### D. Office Members
+
+Office members use the standard office role and its defined permissions.
+
+They can:
+- Access the office functions required for institutional administration.
+- Record fee payments through Fees Management.
+- Register new students through the permitted student-record workflow.
+- View and edit student details.
+- Access the student and financial records required for their duties.
+
+They cannot:
+- Access User Management.
+- Create or manage user accounts.
+- Change roles or permissions.
+- Access library administration unless explicitly included in their defined role, which it is not in this specification.
+- Access department-only academic operations.
+- Change fee structures or perform restricted financial actions merely because they are office members.
+
+The User Management navigation item must not appear for office members.
+
+### E. Library
+
+The Library role can access library-related functionality only.
+
+It must not display navigation items for:
+- User Management.
+- Fees Management.
+- Office administration.
+- Department accounts.
+- Principal or Secretary administration.
+- Other unrelated institutional modules.
+
+Enforce the same restrictions on all relevant APIs.
+
+### F. Faculty / Teacher Records
+
+In this phase, faculty functionality is limited to maintaining teacher records.
+
+Requirements:
+- Maintain records of teachers working at the college.
+- Do not create faculty login accounts or a faculty portal.
+- Do not implement faculty dashboards, attendance, teaching workflows, or other faculty features in this phase.
+- Teacher records must not automatically create login accounts.
+
+Authorized Super Admin, Principal, Secretary, and office members may manage teacher records according to their institutional permissions.
+
+Department accounts may manage teacher records belonging to their own department only, if the existing teacher-record functionality supports this operation.
+
+Do not create duplicate teacher records or duplicate login accounts.
+
+### G. Students
+
+Implement or maintain student records as a shared institutional data source for integration with Fees Management and future ERP modules.
+
+Requirements:
+- No student login in this phase.
+- No student portal.
+- No student authentication accounts.
+- Students are records, not login roles in the current implementation.
+- Authorized Office Members, Principal, Secretary, and Super Admin can add and edit student records.
+- Other roles must not receive student-record permissions unless explicitly specified in this document.
+- Student records must be reusable by Fees Management and future modules.
+- Do not duplicate student records across modules.
+
+### H. Department Accounts
+
+The Super Admin creates departments and assigns a department account to each department.
+
+Requirements:
+- Maintain one shared username/password account per department.
+- Department accounts must be associated with a specific department in the database.
+- Department users can access only their assigned department's records and marks.
+- They must not access other departments' marks or restricted records.
+- Department accounts may manage teacher records belonging to their own department.
+- They must be able to use the department functions required for marks uploading and related academic operations when those features are implemented.
+- Do not implement additional academic features beyond what is necessary for the User Management integration.
+- Department accounts must not access User Management, Fees Management, Library administration, or institutional administration.
+
+The shared account's department association must be enforced on the server. Never trust a department identifier supplied by the frontend without checking it against the authenticated account.
+
+---
+
+## 4. Role-Based Navigation and Visibility
+
+This is a core requirement across the entire ERP.
+
+**Users must see only the modules, navigation items, buttons, actions, account records, and data they are authorized to access.**
+
+Do not display unavailable features with messages such as:
+- "Access denied."
+- "You are not authorized."
+- "Restricted module."
+- "Permission required."
+
+Instead, do not show the unavailable navigation item or action in the first place.
+
+Examples:
+- Office members must not see User Management.
+- Library users must see only Library functionality.
+- Department accounts must see their department's permitted functions only.
+- Principal and Secretary must not see the Super Admin account.
+- Super Admin must see all accounts and all modules.
+- Students must not see student login options because student login is not enabled.
+
+### Implementation requirements
+
+1. Create or reuse a centralized role/permission mechanism.
+2. Build the navigation menu from the authenticated user's permitted modules and actions.
+3. Hide unauthorized buttons, links, menus, account selectors, and actions.
+4. Apply the same visibility rules to search results, dropdowns, tables, filters, and account-management forms.
+5. Do not rely on frontend hiding alone.
+6. Protect API endpoints and database operations with server-side authorization.
+7. Return an appropriate HTTP 403 response for a direct unauthorized request without exposing protected information.
+8. Ensure direct URL access does not expose an unauthorized module.
+9. Ensure an unauthorized user cannot manipulate requests to bypass the UI.
+10. Avoid displaying restricted data while loading the interface.
+
+Do not implement a complicated configurable permission builder unless the existing architecture already provides one. The specified roles and rules are sufficient for this phase.
+
+---
+
+## 5. Account Creation
+
+Only the following roles can create user accounts:
+- Super Admin.
+- Principal.
+- Secretary.
+
+Account creation must be performed through the existing User Management interface.
+
+The account creator must be able to:
+- Enter the person's full name.
+- Set a unique username.
+- Enter an email address where applicable.
+- Select an allowed role.
+- Associate a department account with its department.
+- Set an initial temporary password.
+- Activate the account.
+
+Do not invent unnecessary mandatory fields.
+
+Validate required fields on both frontend and backend.
+
+Prevent duplicate usernames. Validate email uniqueness when email is supplied and used as a login identifier.
+
+The account creator manually sets the initial temporary password.
+
+There is no separate approval process. Once created and activated by an authorized creator, the account can log in, subject to the mandatory first-login password change.
+
+### Role assignment restrictions
+
+- Super Admin may create all supported account types.
+- Principal and Secretary may create and manage permitted accounts but cannot create, modify, suspend, deactivate, or change the role of the Super Admin account.
+- No role may create another Super Admin account unless explicitly authorized by the existing system's protected Super Admin provisioning process.
+- Office, Library, and Department accounts cannot create login accounts.
+
+Do not create student or faculty login accounts in this phase.
+
+---
+
+## 6. Login Identifier
+
+Users must be able to log in using either:
+- Their unique username.
+- Their registered email address.
+
+The backend must identify the correct account safely.
+
+Requirements:
+- Username and email matching must be handled consistently.
+- Prevent ambiguous duplicate identities.
+- Do not reveal whether a particular username or email exists through detailed login errors.
+- Apply lockout checks to the account regardless of whether the login attempt uses username or email.
+- Use the existing secure password verification mechanism.
+
+---
+
+## 7. Initial Password and First Login
+
+The account creator manually sets a temporary password when creating an account.
+
+Requirements:
+1. Store passwords only as secure password hashes using the existing appropriate password-hashing mechanism.
+2. Never store plain-text passwords in the database.
+3. Never include passwords in application logs or audit logs.
+4. Mark newly created accounts as requiring a password change.
+5. On the user's first successful login, require them to change the temporary password before accessing normal ERP modules.
+6. Do not allow the user to bypass the password-change requirement by entering a direct module URL or calling a protected API.
+7. After a successful password change, clear the first-login requirement.
+8. Validate the new password server-side.
+9. Provide a clear password-change interface.
+10. Preserve the existing CSRF and session-security mechanisms.
+
+Use a minimum password length of eight characters unless the existing security configuration specifies a stronger minimum.
+
+Do not introduce arbitrary password expiry rules.
+
+---
+
+## 8. Password Reset
+
+Super Admin, Principal, and Secretary can reset other users' passwords, subject to account protection rules.
+
+Requirements:
+- An authorized administrator can set a new temporary password.
+- The target user must change the password at the next login.
+- The reset operation must not reveal the previous password.
+- Invalidate the target user's existing sessions when a reset is completed.
+- Record the reset action in the audit log without recording the password itself.
+- Do not permit Principal or Secretary to reset or manipulate the Super Admin account.
+- A user may change their own password through the permitted password-change workflow.
+
+Do not add email-based password reset unless separately requested.
+
+---
+
+## 9. Account Status Management
+
+Support these account states:
+- Active.
+- Temporarily locked due to failed login attempts.
+- Suspended.
+- Deactivated.
+
+Use the existing database schema and authentication architecture where possible.
+
+### Suspend
+
+Suspending an account must:
+- Prevent further login.
+- Invalidate active sessions.
+- Preserve account details and historical records.
+- Record the actor, timestamp, and reason where applicable.
+
+### Reactivate
+
+Reactivation must:
+- Restore login eligibility if the account is otherwise valid.
+- Preserve historical activity.
+- Require the appropriate password-change workflow if one remains outstanding.
+
+### Deactivate
+
+Deactivation must:
+- Prevent login.
+- Invalidate active sessions.
+- Preserve the account and its audit history.
+- Preserve references from payments, receipts, marks, student records, and other historical transactions.
+- Prevent the account from appearing as an active account in ordinary operational selectors.
+
+Do not permanently delete accounts as part of normal account management.
+
+Use the label "Deactivate" rather than implying that historical records will be erased.
+
+### Protected Super Admin account
+
+Principal and Secretary must not be able to:
+- See the Super Admin account.
+- Suspend or deactivate it.
+- Change its role.
+- Reset its password.
+- Change its account status.
+- Access its account details through direct API requests.
+
+Super Admin retains control over the Super Admin account and all other accounts.
+
+Do not allow an ordinary account-management operation to accidentally remove the last functional Super Admin account.
+
+---
+
+## 10. Failed Login Lockout
+
+Implement a temporary automatic lockout after six consecutive failed login attempts.
+
+Requirements:
+- Six consecutive failed attempts trigger a 30-minute lockout.
+- During the lockout, valid credentials must not bypass the lockout.
+- Record failed login attempts and lockout events appropriately.
+- After the 30-minute period, allow login attempts again.
+- Successful authentication resets the consecutive failure counter according to the established security policy.
+- Prevent repeated requests from bypassing the lockout.
+- Apply the same protection to username and email login.
+- Return a generic and safe error message that does not expose sensitive account information.
+- Do not require an administrator to unlock a normal 30-minute temporary lockout.
+
+An administrator may still suspend or deactivate an account separately.
+
+---
+
+## 11. Single Active Session
+
+Allow only one active session per account.
+
+When a user logs in successfully on another device or browser:
+- Invalidate the previous session.
+- Create the new authenticated session.
+- Ensure the previous session can no longer access protected APIs.
+- Preserve CSRF protection and secure session handling.
+
+Apply this rule to all account types.
+
+Do not create exceptions for shared department accounts unless explicitly authorized by a later requirement.
+
+---
+
+## 12. Department Management Integration
+
+The User Management module must support the department account structure.
+
+Super Admin must be able to:
+- Create a department record.
+- Edit department details.
+- Assign one department account to that department.
+- Activate, suspend, reactivate, or deactivate its department account.
+- Reset its account password.
+- Review its account status.
+
+A department account must have a reliable database relationship to exactly one department.
+
+Prevent an account from being associated with multiple departments unless the existing schema explicitly supports and the specification later authorizes that arrangement.
+
+Department isolation must be enforced on the server for every department-specific endpoint.
+
+A department must not be able to:
+- View another department's records.
+- Upload marks for another department.
+- Change its own department association.
+- Access User Management.
+- Change its role.
+- Access college-wide fee or library administration.
+
+Do not build a separate marks-management system as part of this module. Provide only the necessary account and department integration.
+
+---
+
+## 13. Teacher and Student Record Boundaries
+
+### Teacher records
+
+Teacher records are institutional records, not user accounts.
+
+Do not:
+- Create faculty login accounts.
+- Generate passwords for teachers.
+- Provide faculty login screens.
+- Add faculty dashboards or unrelated teaching features.
+
+Allow the appropriate existing institutional roles to manage teacher records according to the defined permissions.
+
+Department accounts may manage teacher records only within their own department where the relevant functionality exists.
+
+### Student records
+
+Student records are institutional records, not user accounts.
+
+Do not:
+- Create student login accounts.
+- Generate student passwords.
+- Create student login screens.
+- Implement a student portal.
+
+Student records must be shared across the ERP rather than duplicated within each module.
+
+Office members, Principal, Secretary, and Super Admin may add and edit student records.
+
+Preserve student references in Fees Management and other related records.
+
+---
+
+## 14. Audit Logging
+
+Use the existing audit logging service.
+
+Record meaningful account-management actions, including:
+- Account creation.
+- Role assignment and role changes.
+- Account activation and deactivation.
+- Suspension and reactivation.
+- Password resets.
+- Successful and failed login attempts where appropriate.
+- Temporary lockout events.
+- Session invalidation.
+- Department creation and assignment.
+- Unauthorized access attempts where appropriate.
+
+Each relevant event should identify:
+- Acting user, when available.
+- Affected account or record.
+- Action performed.
+- Timestamp.
+- Before/after values for changes where appropriate.
+- Reason where applicable.
+
+Never log:
+- Plain-text passwords.
+- Password hashes.
+- Session tokens.
+- CSRF tokens.
+- Other sensitive authentication secrets.
+
+Preserve historical audit entries even when an account is deactivated.
+
+Use the existing audit retention policy, with a minimum retention period of one year if the existing implementation supports the established project requirement.
+
+---
+
+## 15. User Management Interface
+
+Create a clean, professional interface consistent with the existing KAMCH ERP design.
+
+Use the existing theme:
+- Deep Brown: #4B2E2E
+- Cream: #F5F5DC
+- Antique Gold: #D4AF37
+
+The interface should be simple for non-technical college staff.
+
+Provide:
+- User account list.
+- Search and filtering.
+- Account creation.
+- Account editing.
+- Role assignment.
+- Department assignment where applicable.
+- Account status display.
+- Suspend/reactivate actions.
+- Deactivate action.
+- Password reset.
+- Relevant account history or audit information.
+
+Show only actions that the current user is permitted to perform.
+
+Do not display inaccessible buttons and then explain that they are restricted.
+
+Do not show the Super Admin account to Principal, Secretary, or any other non-Super-Admin role. Super Admin must be able to see every account.
+
+Do not expose passwords or sensitive authentication information in account details.
+
+Use clear confirmation dialogs for suspension, deactivation, role changes, and password resets.
+
+Do not add unnecessary dashboards, charts, settings, or complex permission editors.
+
+---
+
+## 16. Backend Authorization and Data Security
+
+Authorization must be enforced at every relevant API endpoint and database operation.
+
+Requirements:
+- Authenticate the user before allowing protected operations.
+- Check role and permissions on the server.
+- Prevent users from assigning themselves elevated roles.
+- Prevent users from changing their own role to bypass restrictions.
+- Prevent Principal and Secretary from targeting the Super Admin account through direct requests.
+- Ensure department accounts cannot change the department identifier in requests to access other departments' records.
+- Protect account creation, role changes, suspension, deactivation, and password resets.
+- Use parameterized database queries.
+- Validate input server-side.
+- Preserve existing CSRF protection for state-changing requests.
+- Prevent session reuse after logout, suspension, deactivation, or session replacement.
+- Return safe error messages without leaking passwords, tokens, internal stack traces, or protected account details.
+
+The frontend visibility rules and server-side permissions must be consistent, but the server remains the final authority.
+
+---
+
+## 17. Database and Migration Safety
+
+Reuse the existing users, roles, sessions, audit logs, department, and related tables wherever possible.
+
+If schema changes are necessary:
+- Use additive migrations.
+- Preserve existing accounts and account IDs.
+- Preserve foreign-key relationships and audit history.
+- Avoid destructive schema changes.
+- Do not reset the production or development database.
+- Do not re-create the Super Admin account unnecessarily.
+- Make migrations safe to run only once or implement appropriate migration tracking.
+- Verify database constraints and indexes for unique usernames, email identifiers where applicable, and department associations.
+
+Do not seed fake users, students, teachers, or departments.
+
+Do not put institutional passwords in source code.
+
+---
+
+## 18. Required Testing
+
+Test actual functionality, not just page rendering.
+
+### Account creation
+- Super Admin creates an account.
+- Principal creates an allowed account.
+- Secretary creates an allowed account.
+- Duplicate usernames are rejected.
+- Duplicate email identifiers are rejected where applicable.
+- Office, Library, and Department accounts cannot create accounts.
+- Student and Faculty login accounts cannot be created through this workflow.
+
+### Password security
+- Temporary password works for first login.
+- First login requires a password change.
+- Protected APIs cannot be accessed before the required password change.
+- Password reset invalidates active sessions.
+- Reset users must change the new temporary password.
+- Passwords are not stored or logged in plain text.
+
+### Roles and visibility
+- Super Admin sees every account and module.
+- Principal sees permitted accounts and modules but cannot see or manipulate Super Admin.
+- Secretary sees permitted accounts and modules but cannot see or manipulate Super Admin.
+- Office members cannot see User Management.
+- Library users see only Library functionality.
+- Department accounts see only their own department's permitted functionality.
+- Teacher records do not create login accounts.
+- Students do not receive login accounts.
+- Unauthorized navigation items and buttons are absent.
+
+### Server-side security
+- Direct unauthorized API requests are rejected.
+- Principal and Secretary cannot access the Super Admin account by guessing an ID.
+- Department accounts cannot access another department by changing request parameters.
+- Users cannot elevate their own roles.
+- Suspended and deactivated accounts cannot authenticate.
+- Previous sessions stop working after a new login.
+- Session invalidation works after suspension and deactivation.
+
+### Failed login handling
+- Five failed attempts do not trigger the sixth-attempt threshold prematurely.
+- Six consecutive failures trigger the 30-minute lockout.
+- Correct credentials do not bypass an active lockout.
+- Login becomes possible after the lockout expires, assuming the account is otherwise valid.
+
+### Regression
+- Existing login functionality continues working.
+- Fees Management remains functional.
+- Student and teacher records remain intact.
+- Existing payments, receipts, audit logs, and database relationships remain intact.
+- Existing build and type checks pass.
+
+Run the available type check, production build, and relevant automated tests. Report only tests that were actually executed.
+
+---
+
+## 19. Completion Report
+
+After implementation, provide a concise report containing:
+
+1. Features implemented.
+2. Files changed.
+3. Database migrations created or modified.
+4. Roles and permissions implemented.
+5. Navigation visibility rules implemented.
+6. Security controls implemented.
+7. Tests actually run and their results.
+8. Any remaining issues or manual steps.
+
+Do not claim that a feature works unless it has been implemented and tested.
+
+Do not begin another module.
+
+Do not add features outside this specification.
+
+**The final result must be a reliable User Management module integrated into the existing KAMCH ERP, with clear role boundaries, minimal UI complexity, hidden unauthorized features, server-enforced security, and preserved historical data.**

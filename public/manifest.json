@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "KAMCH ERP — Krishna Ayurvedic Medical College & Hospital",
+  "short_name": "KAMCH ERP",
+  "description": "Institutional ERP for Krishna Ayurvedic Medical College & Hospital",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FAF9F5",
+  "theme_color": "#4B2E2E",
+  "icons": [
+    {
+      "src": "/assets/kamch-logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/kamch-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/kamch-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,693 @@
+# KAMCH ERP — FINAL FEES MANAGEMENT MODULE IMPLEMENTATION PROMPT
+
+## 1. Objective
+
+Implement the Fees Management module for Krishna Ayurvedic Medical College and Hospital (KAMCH ERP).
+
+This module must be practical, secure, maintainable, and suitable for actual college office use.
+
+The existing Fees and User Management implementations were initially created for testing. Treat the Fees module requirements below as the authoritative specification. Inspect existing code only as needed to integrate the module safely. Modify or replace the existing Fees implementation where necessary.
+
+**Do not rebuild the entire ERP. Do not conduct a separate audit. Do not add unrelated features.**
+
+Implement only the requirements specified here.
+
+---
+
+## 2. Mandatory Working Rules
+
+1. Work within the existing project architecture and technology stack.
+2. Reuse the existing authentication, database connection, session management, authorization middleware, logging, and UI components wherever appropriate.
+3. Do not break the login system, User Management, database connection, or other working foundation components.
+4. Do not create duplicate student, user, or authentication systems.
+5. Do not hardcode fee amounts, batch-specific fee values, concession values, or business rules in frontend or backend code.
+6. All configurable fees must be stored in the database and managed through authorized interfaces.
+7. Enforce permissions on the server/API, not just by hiding frontend buttons.
+8. Use database transactions for operations that modify financial records.
+9. Preserve historical financial records and assessments.
+10. Do not delete or overwrite existing database tables. Use safe, additive migrations and adapt the existing schema where necessary.
+11. Do not introduce unnecessary dependencies, dashboards, automation, or architectural complexity.
+12. Implement the complete module before adding any other module.
+13. Do not stop after creating UI mockups. Connect all implemented features to real database operations.
+14. After implementation, run the available type checks, production build, and relevant tests. Fix errors introduced by the implementation.
+
+---
+
+## 3. User Roles and Permissions
+
+Use the ERP's existing authenticated user and role system.
+
+### Super Admin
+- Create, edit, activate, and deactivate configurable fee structures.
+- Configure fees for admission batches and seat categories.
+- Apply fee changes to future admissions, selected batches, or selected students.
+- Manage concessions and approve or perform financial corrections and reversals.
+- View all fee records, payments, receipts, outstanding balances, and reports.
+- Verify college-account bank transfers.
+- Manage mess and hostel fee configurations and enrollment rules.
+- View audit history.
+
+### Principal
+- View and edit fee configurations.
+- Change individual fee components and apply bulk changes to selected batches or students.
+- Manage student-specific concessions.
+- View and edit fee records.
+- Verify college-account bank transfers.
+- View payments, receipts, outstanding balances, and reports.
+- Perform authorized financial corrections and reversals.
+- Manage mess and hostel enrollment and fee configurations.
+
+### Secretary
+- View and edit fee records and fee configurations.
+- View and edit payment records as authorized.
+- Verify college-account bank transfers.
+- Manage and review development-fee collections, including payments made directly to the Secretary.
+- View relevant receipts, outstanding balances, reports, and audit history.
+- Perform authorized financial corrections and reversals.
+
+### Office Accounts Staff
+All accounts-related office users should be able to perform ordinary collection operations.
+
+They can:
+- View student fee records and outstanding balances.
+- Record college-account cash collections.
+- Record college-account bank-transfer payment requests.
+- Record the student's initial bank transaction reference.
+- Enter the passbook transaction number and verify bank transfers if their account has the appropriate accounts permission.
+- Record development-fee payments and their supporting details.
+- Generate and print provisional acknowledgements and authorized receipts.
+- View payment history and collection reports required for their work.
+- Manage collection records without changing fee rates.
+
+They cannot:
+- Change fee structures or fee component amounts.
+- Change the assessed fees of a student.
+- Create or approve concessions.
+- Change a student's seat category to alter the payable amount.
+- Approve their own financial corrections or reversals.
+- Delete confirmed financial transactions.
+
+### Departments
+- No access to the Fees module, its APIs, fee records, student payment details, receipts, or financial reports.
+- Enforce this restriction server-side.
+
+Do not grant permissions based solely on a display name. Use the ERP's actual role and permission mechanism.
+
+---
+
+## 4. Fee Structure
+
+Provide the following initial configurable values.
+
+These are initial database configuration values, not hardcoded application rules.
+
+### Government Seat
+
+| Component | Initial amount |
+|---|---:|
+| College fees | ₹75,750 |
+| Development fees | ₹50,000 |
+| Mess fees, optional | ₹30,000 |
+| Hostel fees, optional | ₹30,000 |
+
+Base amount without mess or hostel: ₹1,25,750.
+
+With mess only: ₹1,55,750.
+
+With hostel only: ₹1,55,750.
+
+With both mess and hostel: ₹1,85,750.
+
+### Private Seat
+
+| Component | Initial amount |
+|---|---:|
+| College and development fees combined for the initial structure | ₹4,00,000 |
+| Mess fees, optional | ₹30,000 |
+| Hostel fees, optional | ₹30,000 |
+
+Base amount without mess or hostel: ₹4,00,000.
+
+With both mess and hostel: ₹4,60,000.
+
+### NRI Seat
+
+| Component | Initial amount |
+|---|---:|
+| College and development fees combined for the initial structure | ₹6,00,000 |
+| Mess fees, optional | ₹30,000 |
+| Hostel fees, optional | ₹30,000 |
+
+Base amount without mess or hostel: ₹6,00,000.
+
+With both mess and hostel: ₹6,60,000.
+
+### Fee component requirements
+
+1. Support separate college-fee and development-fee components where applicable.
+2. For Private and NRI seats, the initial ₹4,00,000 and ₹6,00,000 structures must be represented correctly as combined college-and-development amounts. Do not arbitrarily invent a split between those components.
+3. Authorized users must be able to configure the component breakdown when the college defines it.
+4. The system must clearly distinguish college-account collections from development-fee collections payable directly to the Secretary.
+5. All fee amounts must be configurable by admission batch and seat category.
+6. Support new fee components in the future without requiring code changes for every new amount or component.
+7. Display the applicable component breakdown and total to the office user before collecting payment.
+8. Do not permit an office user to edit the displayed fee amounts.
+
+Use Indian rupee formatting consistently.
+
+---
+
+## 5. Fee Configuration and Bulk Changes
+
+Build a dedicated fee-configuration interface restricted to Super Admin and Principal, with Secretary access as specified in the permissions section.
+
+Authorized users must be able to:
+
+- Create and edit fee structures.
+- Configure separate fee amounts for Government, Private, and NRI seats.
+- Configure fee structures for different admission batches.
+- Change individual components.
+- Apply changes to future admissions.
+- Apply changes to a selected batch.
+- Apply changes to selected students.
+- Review the affected students and amounts before confirming a bulk change.
+- See a confirmation summary before the change is saved.
+
+### Historical protection
+
+When a fee structure changes:
+
+- Existing student assessments must not change automatically.
+- Previously collected payments must remain unchanged.
+- Existing outstanding balances must not be silently recalculated.
+- A new batch's fee structure must not modify earlier batches.
+- A change to one student's fee assessment must not modify other students.
+
+If an authorized user explicitly chooses to revise existing assessments, require a confirmation step and record the old amount, new amount, reason, affected student, actor, and timestamp.
+
+Do not apply a change to any student who was not included in the confirmed scope.
+
+---
+
+## 6. Student Records and Admission Status
+
+There is currently no completed Student Management module.
+
+Therefore:
+
+- Start with an empty student list.
+- Do not create demo students or fake admissions.
+- Do not import invented student data.
+- Do not implement a separate full Student Management module inside Fees.
+- Provide the minimum necessary facility for authorized users to create a fee-linked student record when required, because the main Student Management module is not yet available.
+- Keep this facility limited to the fields necessary for fee administration and future integration.
+- Design the database relationship so this temporary registration capability can later connect to the main Student Management module without duplicate students.
+
+A fee-linked student record should support, at minimum:
+- Student name.
+- Unique college registration/admission identifier.
+- Admission batch or academic year.
+- Seat category.
+- Admission status.
+- Mess enrollment status.
+- Hostel enrollment status.
+- Applicable fee assessment.
+- Payment and outstanding balance history.
+
+Validate the unique student identifier to prevent duplicate registrations.
+
+The student list must remain empty until actual student records are entered by authorized users.
+
+---
+
+## 7. Mess and Hostel Enrollment
+
+Mess and hostel are optional services and must be managed independently.
+
+Do not treat mess and hostel as permanent admission-form choices.
+
+A student may:
+- Join mess after admission.
+- Leave mess later.
+- Join hostel after admission.
+- Leave hostel later.
+- Use mess without hostel.
+- Use hostel without mess.
+- Use both services.
+- Use neither service.
+
+Maintain a separate enrollment history for each service.
+
+Each enrollment record should contain:
+- Student.
+- Service type: Mess or Hostel.
+- Enrollment start date.
+- Enrollment end date, where applicable.
+- Applicable fee structure and amount.
+- Status.
+- Authorized user who recorded the change.
+- Timestamp and reason for changes where appropriate.
+
+### Billing rules
+
+- Charge mess only while the student is enrolled in mess under the applicable billing policy.
+- Charge hostel only while the student is enrolled in hostel under the applicable billing policy.
+- Preserve historical enrollment and assessed amounts when a student leaves a service.
+- Do not automatically delete previously assessed fees or paid amounts when enrollment ends.
+- Joining or leaving one service must not affect the other service.
+- Clearly show service charges separately in the student's fee breakdown while maintaining them within the same student fee record and overall outstanding balance.
+
+Do not invent a daily, monthly, semester, or prorated billing rule. Make the billing period and applicable charging method configurable, and do not calculate prorated charges until the college's billing policy is defined.
+
+---
+
+## 8. Student Fee Assessment
+
+Each student must have an individual fee assessment based on:
+- Admission batch.
+- Seat category.
+- Applicable fee structure.
+- Applicable college fee.
+- Applicable development fee.
+- Mess enrollment and charges, if applicable.
+- Hostel enrollment and charges, if applicable.
+- Authorized concessions.
+- Other explicitly configured components.
+
+Show the student’s:
+- Original assessed fee.
+- Component-wise breakdown.
+- Concessions.
+- Revised payable amount, if authorized changes have been made.
+- Total payments recorded.
+- Pending bank transfers.
+- Verified payments.
+- Outstanding balance.
+- Payment history.
+- Receipt history.
+
+Maintain one overall student fee record while separately tracking the destination and accounting classification of collections.
+
+The outstanding balance must be calculated using the correct financial status of each payment. A bank transfer awaiting verification must not silently be treated as verified money received.
+
+---
+
+## 9. Concessions
+
+Support both:
+- Fixed-amount concessions.
+- Percentage-based concessions.
+
+Concessions must be applied by authorized users only.
+
+Each concession must include:
+- Student.
+- Applicable fee component or assessment.
+- Concession type.
+- Concession value.
+- Calculated reduction.
+- Reason.
+- Authorized user.
+- Timestamp.
+
+Validate concession limits so that the payable amount cannot become negative.
+
+Require confirmation before saving a concession.
+
+Record the original assessment, concession, revised payable amount, and reason in the audit history.
+
+Office accounts staff must not create, approve, edit, or remove concessions.
+
+---
+
+## 10. Payment Categories and Destinations
+
+Maintain two distinct collection destinations.
+
+### A. College Account
+
+College-account collections include the fee components payable to the college, including applicable college fees and mess/hostel charges.
+
+Supported payment methods:
+- Cash.
+- Bank transfer.
+
+### B. Secretary / Development Fee Account
+
+Development fees are payable directly to the Secretary.
+
+Track development-fee collections separately from college-account collections even when the student's overall fee assessment combines both amounts.
+
+For development-fee payments:
+- Online payments must record the transaction ID/reference supplied by the student.
+- Cash payments must generate a separate numbered, printable development-fee receipt.
+- Maintain the payment destination, amount, method, student, date, and receipt reference.
+- Do not falsely represent development-fee collections as money deposited into the college bank account.
+
+For Private and NRI structures where college and development fees are initially combined, support the correct accounting destination when the college configures the component breakdown. Do not invent an unsupported allocation.
+
+---
+
+## 11. College Bank Transfer Workflow
+
+When a student pays the college account by bank transfer, the office user must record:
+- Student.
+- Applicable fee assessment/component.
+- Amount.
+- Date of payment.
+- Initial transaction ID/reference supplied by the student.
+- Payment destination.
+- Recording user.
+- Notes where necessary.
+
+The payment must initially have the status **Pending Verification**.
+
+The system must preserve the original transaction reference.
+
+The next morning, after the college passbook is checked, an authorized verifier records:
+- The transaction number/reference found in the passbook.
+- Verification date and time.
+- Verifying user.
+- Verification notes where necessary.
+
+After successful verification, the payment status becomes **Verified**.
+
+### Verification requirements
+
+- A pending bank transfer must not be treated as a verified collection.
+- Do not permit office staff to mark a transfer as verified without the required verification permission.
+- Record verification actions in the audit history.
+- Support rejection of a transfer that cannot be confirmed, with a mandatory reason.
+- A rejected transfer must not count as money received.
+- Preserve rejected and pending transaction records for traceability.
+- Prevent duplicate transaction recording where reasonably possible, using appropriate validation and database constraints.
+- Do not allow a payment's original transaction reference or amount to be silently overwritten.
+
+Principal and Secretary must be able to view and edit payment records according to their permissions. Authorized edits to financial transactions must be audited.
+
+---
+
+## 12. Cash Payment Workflow
+
+For a college-account cash payment:
+
+1. The office user selects the student.
+2. The system displays the applicable fee assessment and outstanding balance.
+3. The office user enters the amount collected and required details.
+4. The system validates the amount.
+5. The payment is recorded as collected.
+6. A uniquely numbered, printable receipt is generated.
+7. The payment and receipt are added to the student's history.
+8. The collecting user's identity and timestamp are recorded.
+
+Cash collections must not require the next-morning bank verification workflow.
+
+Prevent overpayment beyond the legitimate outstanding amount unless an explicitly authorized and documented process permits it.
+
+---
+
+## 13. Development Fee Payment Workflow
+
+Development fees are payable directly to the Secretary.
+
+### Online development-fee payment
+
+Record:
+- Student.
+- Amount.
+- Transaction ID/reference.
+- Payment date.
+- Collection destination.
+- Recording user.
+- Status and supporting notes.
+
+Do not mark a development-fee payment as confirmed solely because the student supplied a transaction ID. The confirmation workflow must be appropriate to the actual payment evidence and the Secretary's collection process.
+
+### Cash development-fee payment
+
+- Record the amount received.
+- Generate a separate, uniquely numbered, printable receipt.
+- Identify it as a development-fee receipt payable to the Secretary.
+- Record the receiving user and timestamp.
+- Maintain its separate collection ledger.
+
+Do not use the college-account bank passbook verification workflow for a payment that was made directly to the Secretary in cash.
+
+---
+
+## 14. Receipts and Printing
+
+Support professional, printable receipts for both cash and online payments.
+
+Receipts must include, as applicable:
+- College name and logo using existing project assets.
+- Unique receipt number.
+- Student name and college identifier.
+- Admission batch and seat category.
+- Receipt date.
+- Fee components covered.
+- Amount paid.
+- Payment method.
+- Transaction reference where applicable.
+- Collection destination.
+- Payment status.
+- Amount in numerals and words, if supported reliably.
+- Authorized collector or approver.
+- Clear provisional or final status.
+
+### Receipt status
+
+For a college-account bank transfer:
+- While the payment is pending, generate a **Provisional Payment Acknowledgement**.
+- After successful verification, generate or make available the **Final Verified Receipt**.
+- Never label an unverified transfer as verified.
+- Preserve the association between the provisional acknowledgement and the final receipt.
+
+For college-account cash payments:
+- Generate the final collection receipt immediately after recording the payment.
+
+For development-fee payments:
+- Generate a separate receipt identifying the Secretary/development-fee destination.
+- Do not combine unrelated college-account and development-fee receipts into one receipt that obscures where the money was paid.
+
+Use print-friendly HTML/CSS or the project's existing printing approach. Do not introduce a complex document-generation system unnecessarily.
+
+Receipts must be readable when printed on ordinary A4 paper, with sensible margins and no unnecessary navigation or application buttons.
+
+Do not allow an ordinary office user to alter an issued receipt's financial content by editing the page.
+
+---
+
+## 15. Payment Corrections, Reversals, and Refunds
+
+Only Principal and Super Admin may perform authorized financial corrections or reversals, subject to their permissions.
+
+- Never physically delete a confirmed payment to hide a mistake.
+- Do not silently overwrite financial history.
+- Preserve the original transaction.
+- Record the correction/reversal as an auditable action.
+- Require a reason.
+- Record the actor, timestamp, original amount, corrected amount, and related payment/receipt.
+- Ensure that balances are recalculated consistently.
+- Prevent an ordinary office user from reversing, refunding, or changing a confirmed payment.
+- Keep refund records distinguishable from ordinary collections.
+
+The system must prevent corrections from creating duplicate payments or inconsistent outstanding balances.
+
+---
+
+## 16. Reports
+
+Provide practical reports needed by the college office, Principal, and Secretary.
+
+At minimum:
+- Student-wise fee ledger.
+- Outstanding balances.
+- Component-wise assessed fees.
+- Collections by date range.
+- Collections by payment method.
+- Collections by destination: college account versus Secretary/development-fee account.
+- Pending bank transfers.
+- Verified bank transfers.
+- Rejected transfers.
+- Cash collections.
+- Development-fee collections.
+- Mess enrollment and related assessed charges.
+- Hostel enrollment and related assessed charges.
+- Concessions.
+- Receipts issued.
+- Reversals and refunds.
+
+Apply role-based access to reports.
+
+Provide useful filters such as date range, batch, seat category, student, payment status, payment method, and collection destination where applicable.
+
+Avoid unnecessary charts or complicated analytics. Prioritize accurate data, readable tables, and useful filters.
+
+---
+
+## 17. Database and Financial Integrity
+
+Design or adapt the database to support:
+- Configurable fee structures.
+- Admission-batch-specific fees.
+- Student fee assessments and historical snapshots.
+- Configurable fee components and collection destinations.
+- Student-specific concessions.
+- Mess and hostel enrollment history.
+- Payments and their statuses.
+- Bank transaction references.
+- Passbook verification records.
+- Receipts and receipt statuses.
+- Financial corrections, reversals, and refunds.
+- Audit history.
+
+Use appropriate foreign keys, indexes, unique constraints, decimal monetary types, and database transactions.
+
+Do not use floating-point types for money.
+
+Do not use frontend calculations as the authoritative source for payable amounts or balances. The backend must validate and calculate financial values.
+
+Use a consistent currency precision suitable for Indian rupees.
+
+A payment, its status, the receipt, and the associated balance must remain consistent if an operation fails midway.
+
+Do not hard-delete financial records that have been used in transactions.
+
+Use additive migrations. Do not drop or recreate the entire database.
+
+---
+
+## 18. Audit Logging
+
+Record meaningful financial actions, including:
+- Fee structure creation and edits.
+- Bulk fee changes.
+- Student assessment creation or authorized revision.
+- Student seat-category changes affecting fees.
+- Mess and hostel enrollment changes.
+- Concessions.
+- Payment creation.
+- Bank-transfer verification or rejection.
+- Receipt generation and status changes.
+- Corrections, reversals, and refunds.
+- Permission-denied attempts where appropriate.
+
+Each audit event should identify:
+- Acting user.
+- Action.
+- Affected record.
+- Timestamp.
+- Relevant before/after values where appropriate.
+- Reason when required.
+
+Never store plain-text passwords or unnecessary sensitive authentication data in logs.
+
+---
+
+## 19. User Interface
+
+Follow the existing KAMCH ERP theme:
+- Deep Brown: #4B2E2E
+- Cream: #F5F5DC
+- Antique Gold: #D4AF37
+
+Use the existing college logo and design system.
+
+The UI must be:
+- Professional and clean.
+- Responsive on desktop, tablet, and mobile.
+- Easy for non-technical office staff.
+- Consistent with existing navigation and authentication.
+- Free of demo/showcase screens and unnecessary technical labels.
+
+The main Fees interface should provide:
+1. Student fee search/list.
+2. Individual student fee ledger.
+3. Record payment.
+4. Pending bank transfers.
+5. Payment verification.
+6. Receipt viewing/printing.
+7. Fee configuration for authorized roles.
+8. Concessions for authorized roles.
+9. Mess and hostel enrollment management.
+10. Reports.
+
+Show relevant status labels clearly, such as Pending Verification, Verified, Rejected, Cash Collected, Provisional Acknowledgement, and Final Receipt.
+
+Display validation errors in understandable language.
+
+Do not show unauthorized actions or data to users who lack permission.
+
+---
+
+## 20. Testing Requirements
+
+Test the actual implementation, not just whether pages render.
+
+### Fee calculations
+- Government seat with no mess/hostel.
+- Government seat with mess only.
+- Government seat with hostel only.
+- Government seat with both.
+- Private seat with optional services.
+- NRI seat with optional services.
+- Modified fee structures for different batches.
+- Student-specific fixed and percentage concessions.
+
+### Payment handling
+- College cash payment and final receipt.
+- College bank transfer remains pending until verified.
+- Passbook reference entry and successful verification.
+- Bank transfer rejection and its effect on the balance.
+- Duplicate transaction prevention.
+- Separate development-fee cash receipt.
+- Development-fee online payment recording.
+- Partial payments.
+- Outstanding balance calculations.
+- Authorized correction and reversal.
+- Unauthorized office-user attempts to edit fees or reverse payments.
+
+### Enrollment
+- Student joins mess after admission.
+- Student leaves mess.
+- Student joins hostel independently.
+- Student leaves hostel.
+- Historical charges remain intact.
+- Mess changes do not affect hostel enrollment, and vice versa.
+
+### Security and regression
+- Department roles cannot access the Fees module or APIs.
+- Office users cannot modify fee amounts or concessions.
+- Principal and Super Admin permissions work correctly.
+- Secretary permissions work correctly.
+- Existing login, authentication, and session handling still work.
+- Existing unrelated modules continue working.
+- No demo students are created.
+- Database migrations preserve existing data.
+
+Run available type checks, the production build, and relevant tests. Fix failures caused by the implementation.
+
+Do not claim that a test passed unless it was actually executed.
+
+---
+
+## 21. Final Deliverables
+
+After completing the implementation, provide a concise report containing:
+
+1. Features implemented.
+2. Database tables or migrations created or changed.
+3. API routes and frontend components changed.
+4. Permissions enforced.
+5. Tests actually run and their results.
+6. Any unresolved issues or requirements that could not be completed.
+7. Any required manual setup steps.
+
+Do not begin another module.
+
+Do not initiate an unrelated refactor.
+
+Do not create additional features beyond this specification without asking first.
+
+The goal is a reliable, usable Fees Management module that follows the college's business rules, preserves financial history, and can be maintained without repeated redesign.
